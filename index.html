@@ -9,7 +9,7 @@
 <body>
     <div style="text-align: center; margin-top: 30px; font-family: sans-serif; max-width: 400px; margin-left: auto; margin-right: auto; padding: 15px;">
         <h2>Registro de Campo (Voz Offline)</h2>
-        <p style="font-size: 14px; color: #666;">Graba notas en el apiario sin necesidad de internet</p>
+        <p style="font-size: 14px; color: #666;">Graba notas en el apiario sin internet</p>
         
         <button id="recordButton" style="padding: 20px; font-size: 32px; background-color: #ffc107; border: none; border-radius: 50%; cursor: pointer; width: 90px; height: 90px; box-shadow: 0px 4px 8px rgba(0,0,0,0.2);">🎙️</button>
         <p id="status" style="margin-top: 15px; font-weight: bold; color: #d97706; font-size: 15px;">Toca el micrófono para grabar</p>
@@ -26,16 +26,12 @@
     </div>
 
     <script>
-        // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('SW activo:', reg.scope))
-                    .catch(err => console.log('SW error:', err));
+                navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
             });
         }
 
-        // Configuración de IndexedDB para guardar binarios de audio de forma segura
         let db;
         const request = indexedDB.open("ApicolaAudioDB", 1);
 
@@ -49,10 +45,6 @@
         request.onsuccess = function(e) {
             db = e.target.result;
             loadStoredAudios();
-        };
-
-        request.onerror = function(e) {
-            console.error("Error con IndexedDB:", e);
         };
 
         let mediaRecorder;
@@ -72,28 +64,23 @@
                     mediaRecorder = new MediaRecorder(stream);
                     audioChunks = [];
 
-                    mediaRecorder.ondataavailable = event => {
-                        audioChunks.push(event.data);
-                    };
-
+                    mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
                     mediaRecorder.onstop = () => {
                         currentBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        const audioUrl = URL.createObjectURL(currentBlob);
-                        audioPreview.src = audioUrl;
+                        audioPreview.src = URL.createObjectURL(currentBlob);
                         audioPreview.style.display = 'block';
                         saveButton.style.display = 'block';
-                        status.innerText = "Grabación lista. ¡Escúchala o guárdala!";
+                        status.innerText = "Grabación lista. ¡Guárdala!";
                     };
 
                     mediaRecorder.start();
                     recording = true;
                     recordButton.style.backgroundColor = '#ef4444';
-                    status.innerText = "🔴 Grabando nota de voz...";
+                    status.innerText = "🔴 Grabando nota...";
                     audioPreview.style.display = 'none';
                     saveButton.style.display = 'none';
                 } catch (err) {
                     alert('Permiso de micrófono requerido.');
-                    console.error(err);
                 }
             } else {
                 mediaRecorder.stop();
@@ -102,23 +89,15 @@
             }
         });
 
-        // Guardar el Blob en IndexedDB
         saveButton.addEventListener('click', () => {
             if (!currentBlob) return;
 
             const transaction = db.transaction(["audios"], "readwrite");
             const store = transaction.objectStore("audios");
-
-            const record = {
-                blob: currentBlob,
-                fecha: new Date().toLocaleString("es-ES"),
-                sincronizado: false
-            };
-
-            store.add(record);
+            store.add({ blob: currentBlob, fecha: new Date().toLocaleString("es-ES") });
 
             transaction.oncomplete = () => {
-                status.innerText = "✅ Audio guardado localmente en el celular.";
+                status.innerText = "✅ Audio guardado en el celular.";
                 audioPreview.style.display = 'none';
                 saveButton.style.display = 'none';
                 currentBlob = null;
@@ -126,7 +105,6 @@
             };
         });
 
-        // Mostrar audios guardados en pantalla con botón de descarga directo
         function loadStoredAudios() {
             if (!db) return;
             const transaction = db.transaction(["audios"], "readonly");
@@ -154,24 +132,30 @@
                     audio.style.width = "100%";
                     audio.style.marginTop = "5px";
 
-                    // Botón de descarga real y directo
-                    const downloadBtn = document.createElement('button');
-                    downloadBtn.innerText = "📥 Descargar archivo para RedApícola";
-                    downloadBtn.style.cssText = "margin-top: 8px; width: 100%; padding: 8px; background-color: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold;";
+                    // Botón de compartir nativo del celular
+                    const shareBtn = document.createElement('button');
+                    shareBtn.innerText = "📤 Compartir Audio";
+                    shareBtn.style.cssText = "margin-top: 8px; width: 100%; padding: 10px; background-color: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold;";
                     
-                    downloadBtn.onclick = () => {
-                        const url = URL.createObjectURL(item.blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `audio_apiario_${index + 1}_${Date.now()}.webm`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
+                    shareBtn.onclick = async () => {
+                        const file = new File([item.blob], `audio_apiario_${index + 1}.webm`, { type: 'audio/webm' });
+                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                            try {
+                                await navigator.share({
+                                    files: [file],
+                                    title: 'Nota Apícola',
+                                    text: 'Registro de voz desde el apiario'
+                                });
+                            } catch (error) {
+                                console.log('Error al compartir', error);
+                            }
+                        } else {
+                            alert('Tu navegador no soporta compartir archivos directamente. Usa el reproductor.');
+                        }
                     };
 
                     li.appendChild(audio);
-                    li.appendChild(downloadBtn);
+                    li.appendChild(shareBtn);
                     list.appendChild(li);
                 });
             };
