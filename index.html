@@ -82,7 +82,7 @@
                             if (transcriber) {
                                 // Convertir el blob a URL o array para la IA local
                                 const audioURL = URL.createObjectURL(audioBlob);
-                                const output = await transcriber(audioURL);
+                                const output = await transcriber(audioURL, {language: 'spanish',task: 'transcribe'});
                                 taskInput.value = output.text || "Transcripción completada.";
                                 aiStatus.innerText = "¡Transcripción local exitosa!";
                             } else {
