@@ -3,66 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registro Apícola Offline con IA</title>
+    <title>Registro Apícola Offline</title>
     <link rel="manifest" href="manifest.json">
-    <!-- Importar Transformers.js -->
-    <script type="module">
-        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0';
-        // Desactivar threads locales para evitar fallos de memoria en navegadores móviles
-        env.allowLocalModels = false;
-        window.transformersPipeline = pipeline;
-    </script>
 </head>
 <body>
     <div style="text-align: center; margin-top: 30px; font-family: sans-serif; max-width: 400px; margin-left: auto; margin-right: auto; padding: 15px;">
-        <h2>Registro Apícola (IA Local)</h2>
-        <p style="font-size: 14px; color: #666;">Graba tu nota de voz en el campo</p>
+        <h2>Registro de Campo (Voz Offline)</h2>
+        <p style="font-size: 14px; color: #666;">Graba notas en el apiario sin necesidad de internet</p>
         
-        <button id="recordButton" style="padding: 20px; font-size: 28px; background-color: #ffc107; border: none; border-radius: 50%; cursor: pointer; width: 90px; height: 90px; box-shadow: 0px 4px 8px rgba(0,0,0,0.2);">🎙️</button>
-        <p id="aiStatus" style="margin-top: 15px; font-weight: bold; color: #d97706; font-size: 14px;">Cargando modelo de IA...</p>
+        <button id="recordButton" style="padding: 20px; font-size: 32px; background-color: #ffc107; border: none; border-radius: 50%; cursor: pointer; width: 90px; height: 90px; box-shadow: 0px 4px 8px rgba(0,0,0,0.2);">🎙️</button>
+        <p id="status" style="margin-top: 15px; font-weight: bold; color: #d97706; font-size: 15px;">Toca el micrófono para grabar</p>
         
-        <textarea id="taskInput" placeholder="La transcripción en español aparecerá aquí..." style="width: 100%; height: 100px; padding: 10px; font-size: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box;"></textarea>
-        <br><br>
-        <button id="saveButton" style="padding: 12px 20px; font-size: 16px; background-color: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; width: 100%;">💾 Guardar Registro</button>
+        <audio id="audioPreview" controls style="width: 100%; margin-top: 15px; display: none;"></audio>
         
-        <div style="margin-top: 25px; text-align: left;">
-            <h3>Registros Guardados:</h3>
-            <ul id="taskList" style="padding-left: 20px; color: #444; font-size: 14px;"></ul>
+        <br>
+        <button id="saveButton" style="padding: 12px 20px; font-size: 16px; background-color: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 15px; display: none;">💾 Guardar Audio en Celular</button>
+        
+        <div style="margin-top: 30px; text-align: left;">
+            <h3>Audios Pendientes de Sincronizar:</h3>
+            <ul id="audioList" style="padding-left: 20px; color: #444; font-size: 14px;"></ul>
         </div>
     </div>
 
     <script>
-        // Service Worker
+        // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('SW ok:', reg.scope))
-                    .catch(err => console.log('SW err:', err));
+                    .then(reg => console.log('SW activo:', reg.scope))
+                    .catch(err => console.log('SW error:', err));
             });
         }
+
+        // Configuración de IndexedDB para guardar binarios de audio de forma segura
+        let db;
+        const request = indexedDB.open("ApicolaAudioDB", 1);
+
+        request.onupgradeneeded = function(e) {
+            db = e.target.result;
+            if (!db.objectStoreNames.contains("audios")) {
+                db.createObjectStore("audios", { keyPath: "id", autoIncrement: true });
+            }
+        };
+
+        request.onsuccess = function(e) {
+            db = e.target.result;
+            loadStoredAudios();
+        };
+
+        request.onerror = function(e) {
+            console.error("Error con IndexedDB:", e);
+        };
 
         let mediaRecorder;
         let audioChunks = [];
         let recording = false;
-        let transcriber = null;
+        let currentBlob = null;
 
         const recordButton = document.getElementById('recordButton');
-        const aiStatus = document.getElementById('aiStatus');
-        const taskInput = document.getElementById('taskInput');
-
-        // Cargar Whisper en español
-        async function initAI() {
-            try {
-                aiStatus.innerText = "Preparando IA en español...";
-                transcriber = await window.transformersPipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
-                aiStatus.innerText = "¡IA lista para grabar!";
-            } catch (err) {
-                console.error(err);
-                aiStatus.innerText = "Error cargando IA. Se usará modo texto.";
-            }
-        }
-
-        setTimeout(initAI, 1000);
+        const status = document.getElementById('status');
+        const audioPreview = document.getElementById('audioPreview');
+        const saveButton = document.getElementById('saveButton');
 
         recordButton.addEventListener('click', async () => {
             if (!recording) {
@@ -75,47 +76,23 @@
                         audioChunks.push(event.data);
                     };
 
-                    mediaRecorder.onstop = async () => {
-                        aiStatus.innerText = "Procesando audio...";
-                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-                        
-                        try {
-                            if (transcriber) {
-                                const arrayBuffer = await audioBlob.arrayBuffer();
-                                const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-                                
-                                // Extraer canal mono
-                                const channelData = audioBuffer.getChannelData(0);
-
-                                aiStatus.innerText = "Transcribiendo audio...";
-                                
-                                // Forzar decodificación estricta en español sin traducción
-                                const output = await transcriber(channelData, {
-                                    language: 'spanish',
-                                    task: 'transcribe',
-                                    return_timestamps: false
-                                });
-                                
-                                const texto = output.text ? output.text.trim() : "";
-                                taskInput.value = texto;
-                                aiStatus.innerText = "¡Transcripción finalizada!";
-                            } else {
-                                taskInput.value = "Nota grabada sin IA.";
-                                aiStatus.innerText = "Guardado básico.";
-                            }
-                        } catch (e) {
-                            console.error(e);
-                            aiStatus.innerText = "Error procesando el audio.";
-                        }
+                    mediaRecorder.onstop = () => {
+                        currentBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const audioUrl = URL.createObjectURL(currentBlob);
+                        audioPreview.src = audioUrl;
+                        audioPreview.style.display = 'block';
+                        saveButton.style.display = 'block';
+                        status.innerText = "Grabación lista. ¡Escúchala o guárdala!";
                     };
 
                     mediaRecorder.start();
                     recording = true;
                     recordButton.style.backgroundColor = '#ef4444';
-                    aiStatus.innerText = "Escuchando... Haz clic para detener";
+                    status.innerText = "🔴 Grabando nota de voz...";
+                    audioPreview.style.display = 'none';
+                    saveButton.style.display = 'none';
                 } catch (err) {
-                    alert('Permiso de micrófono denegado.');
+                    alert('Permiso de micrófono requerido.');
                     console.error(err);
                 }
             } else {
@@ -125,33 +102,63 @@
             }
         });
 
-        // Guardar en localStorage
-        function loadTasks() {
-            const tasks = JSON.parse(localStorage.getItem('offline_tasks') || '[]');
-            const listElement = document.getElementById('taskList');
-            listElement.innerHTML = '';
-            tasks.forEach(task => {
-                const li = document.createElement('li');
-                li.innerText = task;
-                listElement.appendChild(li);
-            });
-        }
+        // Guardar el Blob en IndexedDB
+        saveButton.addEventListener('click', () => {
+            if (!currentBlob) return;
 
-        document.getElementById('saveButton').addEventListener('click', () => {
-            const taskText = taskInput.value.trim();
-            if (!taskText) {
-                alert('Escribe o graba algo primero.');
-                return;
-            }
-            const tasks = JSON.parse(localStorage.getItem('offline_tasks') || '[]');
-            tasks.push(taskText);
-            localStorage.setItem('offline_tasks', JSON.stringify(tasks));
-            taskInput.value = '';
-            aiStatus.innerText = "Guardado localmente.";
-            loadTasks();
+            const transaction = db.transaction(["audios"], "readwrite");
+            const store = transaction.objectStore("audios");
+
+            const record = {
+                blob: currentBlob,
+                fecha: new Date().toLocaleString("es-ES"),
+                sincronizado: false
+            };
+
+            store.add(record);
+
+            transaction.oncomplete = () => {
+                status.innerText = "✅ Audio guardado localmente en el celular.";
+                audioPreview.style.display = 'none';
+                saveButton.style.display = 'none';
+                currentBlob = null;
+                loadStoredAudios();
+            };
         });
 
-        loadTasks();
+        // Mostrar audios guardados en pantalla
+        function loadStoredAudios() {
+            if (!db) return;
+            const transaction = db.transaction(["audios"], "readonly");
+            const store = transaction.objectStore("audios");
+            const request = store.getAll();
+
+            request.onsuccess = function() {
+                const list = document.getElementById('audioList');
+                list.innerHTML = '';
+                const items = request.result;
+
+                if (items.length === 0) {
+                    list.innerHTML = '<li>No hay audios pendientes.</li>';
+                    return;
+                }
+
+                items.forEach(item => {
+                    const li = document.createElement('li');
+                    li.style.marginBottom = "10px";
+                    li.innerHTML = `<strong>Nota (${item.fecha}):</strong><br>`;
+                    
+                    const audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = URL.createObjectURL(item.blob);
+                    audio.style.width = "100%";
+                    audio.style.marginTop = "5px";
+
+                    li.appendChild(audio);
+                    list.appendChild(li);
+                });
+            };
+        }
     </script>
 </body>
 </html>
