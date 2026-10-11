@@ -5,37 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registro Apícola Offline con IA</title>
     <link rel="manifest" href="manifest.json">
-    <!-- Importar Transformers.js para IA local en el navegador -->
+    <!-- Importar Transformers.js -->
     <script type="module">
-        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0';
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0';
+        // Desactivar threads locales para evitar fallos de memoria en navegadores móviles
+        env.allowLocalModels = false;
         window.transformersPipeline = pipeline;
     </script>
 </head>
 <body>
-    <div style="text-align: center; margin-top: 40px; font-family: sans-serif; max-width: 400px; margin-left: auto; margin-right: auto; padding: 10px;">
-        <h1>Registro en Campo (IA Local)</h1>
-        <p>Graba tu nota de voz (funciona sin internet)</p>
+    <div style="text-align: center; margin-top: 30px; font-family: sans-serif; max-width: 400px; margin-left: auto; margin-right: auto; padding: 15px;">
+        <h2>Registro Apícola (IA Local)</h2>
+        <p style="font-size: 14px; color: #666;">Graba tu nota de voz en el campo</p>
         
-        <button id="recordButton" style="padding: 20px; font-size: 20px; background-color: #ffc107; border: none; border-radius: 50%; cursor: pointer; width: 80px; height: 80px; box-shadow: 0px 4px 6px rgba(0,0,0,0.2);">🎙️</button>
-        <p id="aiStatus" style="margin-top: 15px; font-weight: bold; color: #d97706;">Cargando modelo de IA local...</p>
+        <button id="recordButton" style="padding: 20px; font-size: 28px; background-color: #ffc107; border: none; border-radius: 50%; cursor: pointer; width: 90px; height: 90px; box-shadow: 0px 4px 8px rgba(0,0,0,0.2);">🎙️</button>
+        <p id="aiStatus" style="margin-top: 15px; font-weight: bold; color: #d97706; font-size: 14px;">Cargando modelo de IA...</p>
         
-        <textarea id="taskInput" placeholder="El texto transcrito aparecerá aquí..." style="width: 100%; height: 90px; padding: 10px; font-size: 16px; margin-top: 15px; border-radius: 8px; border: 1px solid #ccc;"></textarea>
+        <textarea id="taskInput" placeholder="La transcripción en español aparecerá aquí..." style="width: 100%; height: 100px; padding: 10px; font-size: 15px; margin-top: 15px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box;"></textarea>
         <br><br>
-        <button id="saveButton" style="padding: 12px 20px; font-size: 16px; background-color: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; width: 100%;">💾 Guardar en el Celular</button>
+        <button id="saveButton" style="padding: 12px 20px; font-size: 16px; background-color: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; width: 100%;">💾 Guardar Registro</button>
         
-        <div style="margin-top: 30px; text-align: left;">
-            <h3>Tareas Guardadas Offline:</h3>
-            <ul id="taskList" style="padding-left: 20px; color: #555;"></ul>
+        <div style="margin-top: 25px; text-align: left;">
+            <h3>Registros Guardados:</h3>
+            <ul id="taskList" style="padding-left: 20px; color: #444; font-size: 14px;"></ul>
         </div>
     </div>
 
     <script>
-        // Registrar el Service Worker para el modo offline
+        // Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('Service Worker registrado:', reg.scope))
-                    .catch(err => console.log('Error Service Worker:', err));
+                    .then(reg => console.log('SW ok:', reg.scope))
+                    .catch(err => console.log('SW err:', err));
             });
         }
 
@@ -48,20 +50,19 @@
         const aiStatus = document.getElementById('aiStatus');
         const taskInput = document.getElementById('taskInput');
 
-        // Inicializar el modelo de IA local al cargar la página
+        // Cargar Whisper en español
         async function initAI() {
             try {
-                aiStatus.innerText = "Descargando modelo de IA local (primera vez)...";
+                aiStatus.innerText = "Preparando IA en español...";
                 transcriber = await window.transformersPipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
-                aiStatus.innerText = "¡IA local lista para usar en el campo!";
+                aiStatus.innerText = "¡IA lista para grabar!";
             } catch (err) {
                 console.error(err);
-                aiStatus.innerText = "IA lista en modo simulación (fallback).";
+                aiStatus.innerText = "Error cargando IA. Se usará modo texto.";
             }
         }
 
-        // Esperar a que cargue el script de la IA
-        setTimeout(initAI, 1500);
+        setTimeout(initAI, 1000);
 
         recordButton.addEventListener('click', async () => {
             if (!recording) {
@@ -75,46 +76,46 @@
                     };
 
                     mediaRecorder.onstop = async () => {
-                        aiStatus.innerText = "Procesando y normalizando audio para la IA...";
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        aiStatus.innerText = "Procesando audio...";
+                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
                         
                         try {
                             if (transcriber) {
-                                // 1. Convertir el blob a ArrayBuffer
                                 const arrayBuffer = await audioBlob.arrayBuffer();
-                                
-                                // 2. Forzar el muestreo estricto a 16kHz que exige Whisper
                                 const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
                                 const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-                                const audioData = audioBuffer.getChannelData(0); // Canal mono
-
-                                aiStatus.innerText = "Transcribiendo con IA local (Español)...";
                                 
-                                // 3. Enviar datos limpios indicando explícitamente el idioma español
-                                const output = await transcriber(audioData, {
-                                    language: 'es',
-                                    task: 'transcribe'
+                                // Extraer canal mono
+                                const channelData = audioBuffer.getChannelData(0);
+
+                                aiStatus.innerText = "Transcribiendo audio...";
+                                
+                                // Forzar decodificación estricta en español sin traducción
+                                const output = await transcriber(channelData, {
+                                    language: 'spanish',
+                                    task: 'transcribe',
+                                    return_timestamps: false
                                 });
                                 
-                                taskInput.value = output.text || "Transcripción completada.";
-                                aiStatus.innerText = "¡Transcripción local exitosa!";
+                                const texto = output.text ? output.text.trim() : "";
+                                taskInput.value = texto;
+                                aiStatus.innerText = "¡Transcripción finalizada!";
                             } else {
-                                taskInput.value = "Colmena revisada (Modo offline).";
-                                aiStatus.innerText = "¡Grabado con éxito!";
+                                taskInput.value = "Nota grabada sin IA.";
+                                aiStatus.innerText = "Guardado básico.";
                             }
                         } catch (e) {
                             console.error(e);
-                            taskInput.value = "Nota de voz grabada en el apiario.";
-                            aiStatus.innerText = "Guardado local de audio completado.";
+                            aiStatus.innerText = "Error procesando el audio.";
                         }
                     };
 
                     mediaRecorder.start();
                     recording = true;
                     recordButton.style.backgroundColor = '#ef4444';
-                    aiStatus.innerText = "Escuchando en el apiario...";
+                    aiStatus.innerText = "Escuchando... Haz clic para detener";
                 } catch (err) {
-                    alert('No se pudo acceder al micrófono.');
+                    alert('Permiso de micrófono denegado.');
                     console.error(err);
                 }
             } else {
@@ -124,7 +125,7 @@
             }
         });
 
-        // Cargar tareas guardadas localmente
+        // Guardar en localStorage
         function loadTasks() {
             const tasks = JSON.parse(localStorage.getItem('offline_tasks') || '[]');
             const listElement = document.getElementById('taskList');
@@ -139,14 +140,14 @@
         document.getElementById('saveButton').addEventListener('click', () => {
             const taskText = taskInput.value.trim();
             if (!taskText) {
-                alert('No hay texto para guardar.');
+                alert('Escribe o graba algo primero.');
                 return;
             }
             const tasks = JSON.parse(localStorage.getItem('offline_tasks') || '[]');
             tasks.push(taskText);
             localStorage.setItem('offline_tasks', JSON.stringify(tasks));
             taskInput.value = '';
-            aiStatus.innerText = "Guardado localmente en el dispositivo.";
+            aiStatus.innerText = "Guardado localmente.";
             loadTasks();
         });
 
