@@ -9,7 +9,7 @@
 <body>
     <div style="text-align: center; margin-top: 40px; font-family: sans-serif; max-width: 400px; margin-left: auto; margin-right: auto; padding: 10px;">
         <h1>Registro en Campo (IA Local)</h1>
-        <p>Habla o escribe tu tarea (funciona sin internet)</p>
+        <p>Graba tu nota de voz (funciona sin internet)</p>
         
         <button id="recordButton" style="padding: 20px; font-size: 20px; background-color: #ffc107; border: none; border-radius: 50%; cursor: pointer; width: 80px; height: 80px; box-shadow: 0px 4px 6px rgba(0,0,0,0.2);">🎙️</button>
         <p id="aiStatus" style="margin-top: 15px; font-weight: bold; color: #d97706;">Presiona para grabar</p>
@@ -33,26 +33,50 @@
             });
         }
 
-        // Lógica de grabación y simulación de IA local en el dispositivo
+        let mediaRecorder;
+        let audioChunks = [];
         let recording = false;
+
         const recordButton = document.getElementById('recordButton');
         const aiStatus = document.getElementById('aiStatus');
         const taskInput = document.getElementById('taskInput');
 
-        recordButton.addEventListener('click', () => {
+        recordButton.addEventListener('click', async () => {
             if (!recording) {
-                recording = true;
-                recordButton.style.backgroundColor = '#ef4444'; // Rojo grabando
-                aiStatus.innerText = "Escuchando en el apiario (IA Local activada)...";
-                
-                // Aquí es donde Whisper.wasm procesará el audio localmente en el próximo ajuste fino.
-                // Simulamos la transcripción local de voz a texto tras 3 segundos:
-                setTimeout(() => {
-                    taskInput.value = "Colmena 12: Revisión completada, reina observada y buen flujo de néctar.";
-                    aiStatus.innerText = "¡Audio procesado localmente con éxito!";
-                    recordButton.style.backgroundColor = '#ffc107';
-                    recording = false;
-                }, 3000);
+                try {
+                    // Solicitar permiso y acceder al micrófono del celular
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        aiStatus.innerText = "Procesando audio localmente en el dispositivo...";
+                        
+                        // Aquí conectaremos Whisper.wasm próximamente. 
+                        // Por ahora simulamos la conversión del audio grabado a texto:
+                        setTimeout(() => {
+                            taskInput.value = "Audio capturado del apiario (Listo para procesar con IA local).";
+                            aiStatus.innerText = "¡Audio grabado con éxito!";
+                        }, 1500);
+                    };
+
+                    mediaRecorder.start();
+                    recording = true;
+                    recordButton.style.backgroundColor = '#ef4444'; // Rojo indica grabación activa
+                    aiStatus.innerText = "Grabando voz en el apiario...";
+                } catch (err) {
+                    alert('No se pudo acceder al micrófono. Asegúrate de dar permisos.');
+                    console.error(err);
+                }
+            } else {
+                // Detener la grabación
+                mediaRecorder.stop();
+                recording = false;
+                recordButton.style.backgroundColor = '#ffc107';
             }
         });
 
