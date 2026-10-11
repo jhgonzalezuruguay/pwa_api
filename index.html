@@ -20,7 +20,7 @@
         <button id="saveButton" style="padding: 12px 20px; font-size: 16px; background-color: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 15px; display: none;">💾 Guardar Audio en Celular</button>
         
         <div style="margin-top: 30px; text-align: left;">
-            <h3>Audios Pendientes de Sincronizar:</h3>
+            <h3>Audios Guardados Offline:</h3>
             <ul id="audioList" style="padding-left: 20px; color: #444; font-size: 14px;"></ul>
         </div>
     </div>
@@ -126,7 +126,7 @@
             };
         });
 
-        // Mostrar audios guardados en pantalla
+        // Mostrar audios guardados en pantalla con opción de descarga individual
         function loadStoredAudios() {
             if (!db) return;
             const transaction = db.transaction(["audios"], "readonly");
@@ -139,14 +139,14 @@
                 const items = request.result;
 
                 if (items.length === 0) {
-                    list.innerHTML = '<li>No hay audios pendientes.</li>';
+                    list.innerHTML = '<li>No hay audios guardados.</li>';
                     return;
                 }
 
-                items.forEach(item => {
+                items.forEach((item, index) => {
                     const li = document.createElement('li');
-                    li.style.marginBottom = "10px";
-                    li.innerHTML = `<strong>Nota (${item.fecha}):</strong><br>`;
+                    li.style.marginBottom = "15px";
+                    li.innerHTML = `<strong>Nota ${index + 1} (${item.fecha}):</strong><br>`;
                     
                     const audio = document.createElement('audio');
                     audio.controls = true;
@@ -154,7 +154,20 @@
                     audio.style.width = "100%";
                     audio.style.marginTop = "5px";
 
+                    // Botón para descargar el audio específico y mandarlo a RedApícola
+                    const downloadLink = document.createElement('ahref');
+                    // Corrección para evitar errores de sintaxis en el nodo
+                    const a = document.createElement('a');
+                    a.href = audio.src;
+                    a.download = `audio_apiario_${index + 1}.webm`;
+                    a.innerText = "📥 Descargar para RedApícola";
+                    a.style.display = "block";
+                    a.style.marginTop = "5px";
+                    a.style.fontSize = "13px";
+                    a.style.color = "#2563eb";
+
                     li.appendChild(audio);
+                    li.appendChild(a);
                     list.appendChild(li);
                 });
             };
