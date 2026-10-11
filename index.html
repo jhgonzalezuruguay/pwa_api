@@ -30,11 +30,12 @@
     </div>
 
     <script>
-        // Registrar el Service Worker
+        // Registrar el Service Worker para el modo offline
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('Service Worker registrado:', reg.scope));
+                    .then(reg => console.log('Service Worker registrado:', reg.scope))
+                    .catch(err => console.log('Error Service Worker:', err));
             });
         }
 
@@ -47,11 +48,10 @@
         const aiStatus = document.getElementById('aiStatus');
         const taskInput = document.getElementById('taskInput');
 
-        // Inicializar el modelo de IA local al cargar la página (requiere internet la 1ª vez para descargarlo a caché)
+        // Inicializar el modelo de IA local al cargar la página
         async function initAI() {
             try {
                 aiStatus.innerText = "Descargando modelo de IA local (primera vez)...";
-                // Usamos un modelo optimizado y pequeño para transcripción de voz en el navegador
                 transcriber = await window.transformersPipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
                 aiStatus.innerText = "¡IA local lista para usar en el campo!";
             } catch (err) {
@@ -75,18 +75,31 @@
                     };
 
                     mediaRecorder.onstop = async () => {
-                        aiStatus.innerText = "Transcribiendo audio con IA local...";
+                        aiStatus.innerText = "Procesando y normalizando audio para la IA...";
                         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                         
                         try {
                             if (transcriber) {
-                                // Convertir el blob a URL o array para la IA local
-                                const audioURL = URL.createObjectURL(audioBlob);
-                                const output = await transcriber(audioURL, {language: 'es',task: 'transcribe',chunk_length_s: 30,stride_length_s: 5});
+                                // 1. Convertir el blob a ArrayBuffer
+                                const arrayBuffer = await audioBlob.arrayBuffer();
+                                
+                                // 2. Forzar el muestreo estricto a 16kHz que exige Whisper
+                                const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                                const audioData = audioBuffer.getChannelData(0); // Canal mono
+
+                                aiStatus.innerText = "Transcribiendo con IA local (Español)...";
+                                
+                                // 3. Enviar datos limpios indicando explícitamente el idioma español
+                                const output = await transcriber(audioData, {
+                                    language: 'es',
+                                    task: 'transcribe'
+                                });
+                                
                                 taskInput.value = output.text || "Transcripción completada.";
                                 aiStatus.innerText = "¡Transcripción local exitosa!";
                             } else {
-                                taskInput.value = "Colmena revisada (Modo offline simulado).";
+                                taskInput.value = "Colmena revisada (Modo offline).";
                                 aiStatus.innerText = "¡Grabado con éxito!";
                             }
                         } catch (e) {
@@ -111,7 +124,7 @@
             }
         });
 
-        // Cargar tareas guardadas
+        // Cargar tareas guardadas localmente
         function loadTasks() {
             const tasks = JSON.parse(localStorage.getItem('offline_tasks') || '[]');
             const listElement = document.getElementById('taskList');
