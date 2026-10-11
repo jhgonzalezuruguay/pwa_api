@@ -52,7 +52,7 @@
             try {
                 aiStatus.innerText = "Descargando modelo de IA local (primera vez)...";
                 // Usamos un modelo optimizado y pequeño para transcripción de voz en el navegador
-                transcriber = await window.transformersPipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+                transcriber = await window.transformersPipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
                 aiStatus.innerText = "¡IA local lista para usar en el campo!";
             } catch (err) {
                 console.error(err);
