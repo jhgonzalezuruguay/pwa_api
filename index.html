@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro Apícola Offline</title>
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <div style="text-align: center; margin-top: 50px; font-family: sans-serif;">
+        <h1>Registro de Campo</h1>
+        <p>Graba tu tarea apícola (funciona sin internet)</p>
+        
+        <button id="recordButton" style="padding: 15px 25px; font-size: 18px; background-color: #ffc107; border: none; border-radius: 8px; cursor: pointer;">🎙️ Grabar Tarea</button>
+        <p id="status" style="margin-top: 20px; color: #555;"></p>
+    </div>
+
+    <script>
+        document.getElementById('recordButton').addEventListener('click', () => {
+            document.getElementById('status').innerText = "Grabando audio localmente...";
+        });
+    </script>
+</body>
+</html>
