@@ -126,7 +126,7 @@
             };
         });
 
-        // Mostrar audios guardados en pantalla con opción de descarga individual
+        // Mostrar audios guardados en pantalla con botón de descarga directo
         function loadStoredAudios() {
             if (!db) return;
             const transaction = db.transaction(["audios"], "readonly");
@@ -145,7 +145,7 @@
 
                 items.forEach((item, index) => {
                     const li = document.createElement('li');
-                    li.style.marginBottom = "15px";
+                    li.style.marginBottom = "20px";
                     li.innerHTML = `<strong>Nota ${index + 1} (${item.fecha}):</strong><br>`;
                     
                     const audio = document.createElement('audio');
@@ -154,20 +154,24 @@
                     audio.style.width = "100%";
                     audio.style.marginTop = "5px";
 
-                    // Botón para descargar el audio específico y mandarlo a RedApícola
-                    const downloadLink = document.createElement('ahref');
-                    // Corrección para evitar errores de sintaxis en el nodo
-                    const a = document.createElement('a');
-                    a.href = audio.src;
-                    a.download = `audio_apiario_${index + 1}.webm`;
-                    a.innerText = "📥 Descargar para RedApícola";
-                    a.style.display = "block";
-                    a.style.marginTop = "5px";
-                    a.style.fontSize = "13px";
-                    a.style.color = "#2563eb";
+                    // Botón de descarga real y directo
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.innerText = "📥 Descargar archivo para RedApícola";
+                    downloadBtn.style.cssText = "margin-top: 8px; width: 100%; padding: 8px; background-color: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold;";
+                    
+                    downloadBtn.onclick = () => {
+                        const url = URL.createObjectURL(item.blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `audio_apiario_${index + 1}_${Date.now()}.webm`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    };
 
                     li.appendChild(audio);
-                    li.appendChild(a);
+                    li.appendChild(downloadBtn);
                     list.appendChild(li);
                 });
             };
